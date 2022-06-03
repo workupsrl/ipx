@@ -47,7 +47,7 @@ const Handlers = {
   get pos () { return pos; }
 };
 
-const DEFAULT_CACHE_MAX_AGE = 10;
+const DEFAULT_CACHE_MAX_AGE = 60 * 60 * 24 * 365;
 function getEnv(name, defaultValue) {
   return destr(process.env[name]) ?? defaultValue;
 }
@@ -505,7 +505,6 @@ async function _handleRequest(req, ipx) {
   let url = req.url;
   let img;
   if (cache[url]) {
-    console.log("found in cache", id, cache[url]);
     img = cache[url].element;
   } else {
     img = ipx(id, modifiers, req.options);
@@ -517,7 +516,6 @@ async function _handleRequest(req, ipx) {
       timestamp: new Date(),
       expiry: src.maxAge || DEFAULT_CACHE_MAX_AGE
     };
-    console.log("stored in cache", url, modifiers);
   }
   if (src.mtime) {
     if (req.headers["if-modified-since"]) {
