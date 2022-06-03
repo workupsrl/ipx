@@ -18,7 +18,7 @@ export interface IPXCTX {
   sources: Record<string, Source>
 }
 
-export type IPX = (id: string, modifiers?: Record<string, string>, reqOptions?: any) => {
+export interface IPXImageData {
   src: () => Promise<SourceData>,
   data: () => Promise<{
     data: Buffer,
@@ -26,6 +26,8 @@ export type IPX = (id: string, modifiers?: Record<string, string>, reqOptions?: 
     format: string
   }>
 }
+
+export type IPX = (id: string, modifiers?: Record<string, string>, reqOptions?: any) => IPXImageData
 
 export interface IPXOptions {
   maxAge?: false | number

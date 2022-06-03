@@ -2,8 +2,14 @@ import { ServerResponse, IncomingMessage } from 'http'
 import { decode } from 'ufo'
 import getEtag from 'etag'
 import xss from 'xss'
-import { IPX } from './ipx'
-import { createError } from './utils'
+import { IPX, IPXImageData } from './ipx'
+import { createError, DEFAULT_CACHE_MAX_AGE, getEnv } from './utils'
+
+export interface IPXCache {
+  element: IPXImageData,
+  timestamp: Date,
+  expiry: number
+}
 
 export interface IPXHRequest {
   url: string
@@ -16,6 +22,21 @@ export interface IPXHResponse {
   statusMessage: string
   headers: Record<string, string>
   body: any
+}
+
+const cache: { [key: string]: IPXCache } = {}
+
+function isExpired(key: string, cache: {[key: string]: IPXCache}) {
+  let cacheElement = cache[key]
+  return cacheElement.timestamp.getTime() < new Date().getTime() - cacheElement.expiry * 1000
+}
+
+function clearExpiredCache() {
+  for (const key in cache) {
+    if (isExpired(key, cache)) {
+      delete cache[key]
+    }
+  }
 }
 
 async function _handleRequest (req: IPXHRequest, ipx: IPX): Promise<IPXHResponse> {
@@ -49,11 +70,32 @@ async function _handleRequest (req: IPXHRequest, ipx: IPX): Promise<IPXHResponse
     }
   }
 
-  // Create request
-  const img = ipx(id, modifiers, req.options)
+  clearExpiredCache()
+
+  let url = req.url
+  let img: IPXImageData
+  if (cache[url]) {
+    // Load cached request
+    console.log('found in cache', id, cache[url])
+    img = cache[url].element
+  } else {
+    // Create request
+    img = ipx(id, modifiers, req.options)
+  }
 
   // Get image meta from source
   const src = await img.src()
+
+  if (getEnv('IPX_CACHE_ENABLED', false) && !cache[url]) {
+    // Store to cache
+    cache[url] = {
+      element: img,
+      timestamp: new Date(),
+      expiry: src.maxAge || DEFAULT_CACHE_MAX_AGE
+    }
+
+    console.log("stored in cache", url, modifiers)
+  }
 
   // Caching headers
   if (src.mtime) {
