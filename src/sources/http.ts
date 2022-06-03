@@ -3,7 +3,7 @@ import https from 'https'
 import { fetch } from 'ohmyfetch'
 import { parseURL } from 'ufo'
 import type { SourceFactory } from '../types'
-import { createError, cachedPromise } from '../utils'
+import { createError, cachedPromise, DEFAULT_CACHE_MAX_AGE } from "../utils";
 
 export const createHTTPSource: SourceFactory = (options: any) => {
   const httpsAgent = new https.Agent({ keepAlive: true })
@@ -37,7 +37,7 @@ export const createHTTPSource: SourceFactory = (options: any) => {
       throw createError(response.statusText || 'fetch error', response.status || 500)
     }
 
-    let maxAge = options.maxAge || 300
+    let maxAge = options.maxAge || DEFAULT_CACHE_MAX_AGE
     const _cacheControl = response.headers.get('cache-control')
     if (_cacheControl) {
       const m = _cacheControl.match(/max-age=(\d+)/)

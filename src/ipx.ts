@@ -28,6 +28,7 @@ export type IPX = (id: string, modifiers?: Record<string, string>, reqOptions?: 
 }
 
 export interface IPXOptions {
+  maxAge?: false | number
   dir?: false | string
   domains?: false | string[]
   alias: Record<string, string>,
@@ -59,12 +60,14 @@ export function createIPX (userOptions: Partial<IPXOptions>): IPX {
   // Init sources
   if (options.dir) {
     ctx.sources.filesystem = createFilesystemSource({
-      dir: options.dir
+      dir: options.dir,
+      maxAge: options.maxAge
     })
   }
   if (options.domains) {
     ctx.sources.http = createHTTPSource({
-      domains: options.domains
+      domains: options.domains,
+      maxAge: options.maxAge
     })
   }
 

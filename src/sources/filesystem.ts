@@ -1,7 +1,7 @@
 import { promises as fsp, Stats } from 'fs'
 import { resolve, join } from 'pathe'
 import isValidPath from 'is-valid-path'
-import { createError, cachedPromise } from '../utils'
+import { createError, cachedPromise, DEFAULT_CACHE_MAX_AGE } from "../utils";
 import type { SourceFactory } from '../types'
 
 export const createFilesystemSource: SourceFactory = (options: any) => {
@@ -30,7 +30,7 @@ export const createFilesystemSource: SourceFactory = (options: any) => {
 
     return {
       mtime: stats.mtime,
-      maxAge: options.maxAge || 300,
+      maxAge: options.maxAge || DEFAULT_CACHE_MAX_AGE,
       getData: cachedPromise(() => fsp.readFile(fsPath))
     }
   }
