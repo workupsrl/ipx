@@ -76,7 +76,6 @@ async function _handleRequest (req: IPXHRequest, ipx: IPX): Promise<IPXHResponse
   let img: IPXImageData
   if (cache[url]) {
     // Load cached request
-    console.log('found in cache', id, cache[url])
     img = cache[url].element
   } else {
     // Create request
@@ -93,8 +92,6 @@ async function _handleRequest (req: IPXHRequest, ipx: IPX): Promise<IPXHResponse
       timestamp: new Date(),
       expiry: src.maxAge || DEFAULT_CACHE_MAX_AGE
     }
-
-    console.log("stored in cache", url, modifiers)
   }
 
   // Caching headers
