@@ -30,10 +30,11 @@ export interface IPXImageData {
 export type IPX = (id: string, modifiers?: Record<string, string>, reqOptions?: any) => IPXImageData
 
 export interface IPXOptions {
-  maxAge?: false | number
   dir?: false | string
+  maxAge?: number
   domains?: false | string[]
   alias: Record<string, string>,
+  fetchOptions: RequestInit,
   // TODO: Create types
   // https://github.com/lovell/sharp/blob/master/lib/constructor.js#L130
   sharp?: { [key: string]: any }
@@ -41,13 +42,15 @@ export interface IPXOptions {
 
 // https://sharp.pixelplumbing.com/#formats
 // (gif and svg are not supported as output)
-const SUPPORTED_FORMATS = ['jpeg', 'png', 'webp', 'avif', 'tiff']
+const SUPPORTED_FORMATS = ['jpeg', 'png', 'webp', 'avif', 'tiff', 'gif']
 
 export function createIPX (userOptions: Partial<IPXOptions>): IPX {
   const defaults = {
     dir: getEnv('IPX_DIR', '.'),
     domains: getEnv('IPX_DOMAINS', []),
     alias: getEnv('IPX_ALIAS', {}),
+    fetchOptions: getEnv('IPX_FETCH_OPTIONS', {}),
+    maxAge: getEnv('IPX_MAX_AGE', 300),
     sharp: {}
   }
   const options: IPXOptions = defu(userOptions, defaults) as IPXOptions
@@ -69,6 +72,7 @@ export function createIPX (userOptions: Partial<IPXOptions>): IPX {
   if (options.domains) {
     ctx.sources.http = createHTTPSource({
       domains: options.domains,
+      fetchOptions: options.fetchOptions,
       maxAge: options.maxAge
     })
   }
@@ -91,7 +95,7 @@ export function createIPX (userOptions: Partial<IPXOptions>): IPX {
     const getSrc = cachedPromise(() => {
       const source = hasProtocol(id) ? 'http' : 'filesystem'
       if (!ctx.sources[source]) {
-        throw createError('Unknown source: ' + source, 400)
+        throw createError('Unknown source', 400, source)
       }
       return ctx.sources[source](id, reqOptions)
     })
@@ -120,12 +124,7 @@ export function createIPX (userOptions: Partial<IPXOptions>): IPX {
 
       // Experimental animated support
       // https://github.com/lovell/sharp/issues/2275
-      const animated = modifiers.animated !== undefined || modifiers.a !== undefined
-      if (animated) {
-        // Gif output needs special libvips build
-        // https://github.com/lovell/sharp/pull/2012
-        format = 'webp'
-      }
+      const animated = modifiers.animated !== undefined || modifiers.a !== undefined || format === 'gif'
 
       const Sharp = await import('sharp').then(r => r.default || r) as typeof import('sharp')
       let sharp = Sharp(data, { animated })

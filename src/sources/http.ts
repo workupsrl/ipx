@@ -1,43 +1,49 @@
 import http from 'http'
 import https from 'https'
 import { fetch } from 'ohmyfetch'
-import { parseURL } from 'ufo'
 import type { SourceFactory } from '../types'
-import { createError, cachedPromise, DEFAULT_CACHE_MAX_AGE } from "../utils";
+import { createError, cachedPromise } from "../utils";
 
-export const createHTTPSource: SourceFactory = (options: any) => {
+export interface HTTPSourceOptions {
+  fetchOptions?: RequestInit
+  maxAge?: number
+  domains?: string | string[]
+}
+
+export const createHTTPSource: SourceFactory<HTTPSourceOptions> = (options) => {
   const httpsAgent = new https.Agent({ keepAlive: true })
   const httpAgent = new http.Agent({ keepAlive: true })
 
-  let domains = options.domains || []
-  if (typeof domains === 'string') {
-    domains = domains.split(',').map(s => s.trim())
+  let _domains = options.domains || []
+  if (typeof _domains === 'string') {
+    _domains = _domains.split(',').map(s => s.trim())
   }
-
-  const hosts = domains.map(domain => parseURL(domain, 'https://').host)
+  const domains = _domains.map((d) => {
+    if (!d.startsWith('http')) { d = 'http://' + d }
+    return new URL(d).hostname
+  }).filter(Boolean)
 
   return async (id: string, reqOptions) => {
-    // Parse id as URL
-    const url = new URL(id)
-
-    // Check host
-    if (!url.hostname) {
-      throw createError('Hostname is missing: ' + id, 403)
+    // Check hostname
+    const hostname = new URL(id).hostname
+    if (!hostname) {
+      throw createError('Hostname is missing', 403, id)
     }
-    if (!reqOptions?.bypassDomain && !hosts.find(host => url.hostname === host)) {
-      throw createError('Forbidden host: ' + url.hostname, 403)
+    if (!reqOptions?.bypassDomain && !domains.find(domain => hostname === domain)) {
+      throw createError('Forbidden host', 403, hostname)
     }
 
     const response = await fetch(id, {
       // @ts-ignore
-      agent: id.startsWith('https') ? httpsAgent : httpAgent
+      agent: id.startsWith('https') ? httpsAgent : httpAgent,
+      ...options.fetchOptions
     })
 
     if (!response.ok) {
-      throw createError(response.statusText || 'fetch error', response.status || 500)
+      throw createError('Fetch error', response.status || 500, response.statusText)
     }
 
-    let maxAge = options.maxAge || DEFAULT_CACHE_MAX_AGE
+    let maxAge = options.maxAge
     const _cacheControl = response.headers.get('cache-control')
     if (_cacheControl) {
       const m = _cacheControl.match(/max-age=(\d+)/)
@@ -56,7 +62,7 @@ export const createHTTPSource: SourceFactory = (options: any) => {
       mtime,
       maxAge,
       // @ts-ignore
-      getData: cachedPromise(() => response.buffer())
+      getData: cachedPromise(() => response.arrayBuffer().then(ab => Buffer.from(ab)))
     }
   }
 }

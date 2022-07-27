@@ -2,6 +2,53 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.9.10](https://github.com/unjs/ipx/compare/v0.9.9...v0.9.10) (2022-07-07)
+
+
+### Bug Fixes
+
+* return promise from middleware ([2fb644d](https://github.com/unjs/ipx/commit/2fb644da6c5e2ea52a08db7aed11fd373ac612a1))
+
+### [0.9.9](https://github.com/unjs/ipx/compare/v0.9.8...v0.9.9) (2022-06-22)
+
+
+### Bug Fixes
+
+* **http:** handle domains without protocol and port ([a5b4614](https://github.com/unjs/ipx/commit/a5b46149a3c67f9a7418fdb9ec6474f2e1429f0b))
+
+### [0.9.8](https://github.com/unjs/ipx/compare/v0.9.7...v0.9.8) (2022-06-22)
+
+
+### Bug Fixes
+
+* **http:** use hostname to compare against domains ([3aabc41](https://github.com/unjs/ipx/commit/3aabc4134e7a9e6f52588815fc51d610fc03324d))
+
+### [0.9.7](https://github.com/unjs/ipx/compare/v0.9.6...v0.9.7) (2022-06-22)
+
+
+### Bug Fixes
+
+* **fs:** fix windows path validation ([c631a2b](https://github.com/unjs/ipx/commit/c631a2b11109c306a7460e29a11d852b27301206))
+
+### [0.9.6](https://github.com/unjs/ipx/compare/v0.9.5...v0.9.6) (2022-06-20)
+
+### [0.9.5](https://github.com/unjs/ipx/compare/v0.9.4...v0.9.5) (2022-06-20)
+
+
+### Features
+
+* `fetchOptions` ([#74](https://github.com/unjs/ipx/issues/74)) ([4d0f235](https://github.com/unjs/ipx/commit/4d0f2352b442c47bfe4ff954f927a94c572bb342))
+* enable animated by default for gif (closes [#53](https://github.com/unjs/ipx/issues/53)) ([155afac](https://github.com/unjs/ipx/commit/155afacd70e3bb130a14df61d7c5f1f3062d0b3f))
+* global `maxAge` option ([#71](https://github.com/unjs/ipx/issues/71)) ([a2481dc](https://github.com/unjs/ipx/commit/a2481dc6ca154b89a89aa537965198069a650f37))
+* **middleware:** allow extended modifier seperators ([a47d2aa](https://github.com/unjs/ipx/commit/a47d2aa86e15b7f5bc43220a3d8d2c06147d7c11)), closes [#57](https://github.com/unjs/ipx/issues/57)
+
+
+### Bug Fixes
+
+* improve path validation (resolves [#56](https://github.com/unjs/ipx/issues/56)) ([ec5c15d](https://github.com/unjs/ipx/commit/ec5c15d2ecfa3a5c9c550b918f84cf2f87085f90))
+* **middleware:** sanetize request and response strings (resolves [#42](https://github.com/unjs/ipx/issues/42)) ([1792d3a](https://github.com/unjs/ipx/commit/1792d3aa2f4e572e0ca09cdac7272f60402cf3ea))
+* use `response.arrayBuffer` instead of deprecated `res.buffer` ([b13a77e](https://github.com/unjs/ipx/commit/b13a77e0884e5d4dbb2f7ea7de43ea05e9581698)), closes [#69](https://github.com/unjs/ipx/issues/69)
+
 ### [0.9.4](https://github.com/unjs/ipx/compare/v0.9.3...v0.9.4) (2022-02-17)
 
 
