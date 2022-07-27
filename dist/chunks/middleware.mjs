@@ -1,9 +1,8 @@
 import defu from 'defu';
 import { imageMeta } from 'image-meta';
-import { parseURL, withLeadingSlash, hasProtocol, joinURL, decode } from 'ufo';
+import { withLeadingSlash, hasProtocol, joinURL, decode } from 'ufo';
 import { promises } from 'fs';
-import { resolve, join } from 'pathe';
-import isValidPath from 'is-valid-path';
+import { resolve, join, parse } from 'pathe';
 import http from 'http';
 import https from 'https';
 import { fetch } from 'ohmyfetch';
@@ -47,7 +46,6 @@ const Handlers = {
   get pos () { return pos; }
 };
 
-const DEFAULT_CACHE_MAX_AGE = 60 * 60 * 24 * 365;
 function getEnv(name, defaultValue) {
   return destr(process.env[name]) ?? defaultValue;
 }
@@ -63,9 +61,9 @@ function cachedPromise(fn) {
 }
 class IPXError extends Error {
 }
-function createError(message, statusCode) {
-  const err = new IPXError(message);
-  err.statusMessage = "IPX: " + message;
+function createError(statusMessage, statusCode, trace) {
+  const err = new IPXError(statusMessage + (trace ? ` (${trace})` : ""));
+  err.statusMessage = "IPX: " + statusMessage;
   err.statusCode = statusCode;
   return err;
 }
@@ -74,53 +72,69 @@ const createFilesystemSource = (options) => {
   const rootDir = resolve(options.dir);
   return async (id) => {
     const fsPath = resolve(join(rootDir, id));
-    if (!isValidPath(id) || id.includes("..") || !fsPath.startsWith(rootDir)) {
-      throw createError("Forbidden path:" + id, 403);
+    if (!isValidPath(fsPath) || !fsPath.startsWith(rootDir)) {
+      throw createError("Forbidden path", 403, id);
     }
     let stats;
     try {
       stats = await promises.stat(fsPath);
     } catch (err) {
       if (err.code === "ENOENT") {
-        throw createError("File not found: " + fsPath, 404);
+        throw createError("File not found", 404, fsPath);
       } else {
-        throw createError("File access error for " + fsPath + ":" + err.code, 403);
+        throw createError("File access error " + err.code, 403, fsPath);
       }
     }
     if (!stats.isFile()) {
-      throw createError("Path should be a file: " + fsPath, 400);
+      throw createError("Path should be a file", 400, fsPath);
     }
     return {
       mtime: stats.mtime,
-      maxAge: options.maxAge || DEFAULT_CACHE_MAX_AGE,
+      maxAge: options.maxAge,
       getData: cachedPromise(() => promises.readFile(fsPath))
     };
   };
 };
+const isWindows = process.platform === "win32";
+function isValidPath(fp) {
+  if (isWindows) {
+    fp = fp.slice(parse(fp).root.length);
+  }
+  if (/[<>:"|?*]/.test(fp)) {
+    return false;
+  }
+  return true;
+}
 
 const createHTTPSource = (options) => {
   const httpsAgent = new https.Agent({ keepAlive: true });
   const httpAgent = new http.Agent({ keepAlive: true });
-  let domains = options.domains || [];
-  if (typeof domains === "string") {
-    domains = domains.split(",").map((s) => s.trim());
+  let _domains = options.domains || [];
+  if (typeof _domains === "string") {
+    _domains = _domains.split(",").map((s) => s.trim());
   }
-  const hosts = domains.map((domain) => parseURL(domain, "https://").host);
-  return async (id, reqOptions) => {
-    const url = new URL(id);
-    if (!url.hostname) {
-      throw createError("Hostname is missing: " + id, 403);
+  const domains = _domains.map((d) => {
+    if (!d.startsWith("http")) {
+      d = "http://" + d;
     }
-    if (!reqOptions?.bypassDomain && !hosts.find((host) => url.hostname === host)) {
-      throw createError("Forbidden host: " + url.hostname, 403);
+    return new URL(d).hostname;
+  }).filter(Boolean);
+  return async (id, reqOptions) => {
+    const hostname = new URL(id).hostname;
+    if (!hostname) {
+      throw createError("Hostname is missing", 403, id);
+    }
+    if (!reqOptions?.bypassDomain && !domains.find((domain) => hostname === domain)) {
+      throw createError("Forbidden host", 403, hostname);
     }
     const response = await fetch(id, {
-      agent: id.startsWith("https") ? httpsAgent : httpAgent
+      agent: id.startsWith("https") ? httpsAgent : httpAgent,
+      ...options.fetchOptions
     });
     if (!response.ok) {
-      throw createError(response.statusText || "fetch error", response.status || 500);
+      throw createError("Fetch error", response.status || 500, response.statusText);
     }
-    let maxAge = options.maxAge || DEFAULT_CACHE_MAX_AGE;
+    let maxAge = options.maxAge;
     const _cacheControl = response.headers.get("cache-control");
     if (_cacheControl) {
       const m = _cacheControl.match(/max-age=(\d+)/);
@@ -136,7 +150,7 @@ const createHTTPSource = (options) => {
     return {
       mtime,
       maxAge,
-      getData: cachedPromise(() => response.buffer())
+      getData: cachedPromise(() => response.arrayBuffer().then((ab) => Buffer.from(ab)))
     };
   };
 };
@@ -373,12 +387,14 @@ const h = height;
 const s = resize;
 const pos = position;
 
-const SUPPORTED_FORMATS = ["jpeg", "png", "webp", "avif", "tiff"];
+const SUPPORTED_FORMATS = ["jpeg", "png", "webp", "avif", "tiff", "gif"];
 function createIPX(userOptions) {
   const defaults = {
     dir: getEnv("IPX_DIR", "."),
     domains: getEnv("IPX_DOMAINS", []),
     alias: getEnv("IPX_ALIAS", {}),
+    fetchOptions: getEnv("IPX_FETCH_OPTIONS", {}),
+    maxAge: getEnv("IPX_MAX_AGE", 300),
     sharp: {}
   };
   const options = defu(userOptions, defaults);
@@ -395,6 +411,7 @@ function createIPX(userOptions) {
   if (options.domains) {
     ctx.sources.http = createHTTPSource({
       domains: options.domains,
+      fetchOptions: options.fetchOptions,
       maxAge: options.maxAge
     });
   }
@@ -411,7 +428,7 @@ function createIPX(userOptions) {
     const getSrc = cachedPromise(() => {
       const source = hasProtocol(id) ? "http" : "filesystem";
       if (!ctx.sources[source]) {
-        throw createError("Unknown source: " + source, 400);
+        throw createError("Unknown source", 400, source);
       }
       return ctx.sources[source](id, reqOptions);
     });
@@ -431,10 +448,7 @@ function createIPX(userOptions) {
           meta
         };
       }
-      const animated = modifiers.animated !== void 0 || modifiers.a !== void 0;
-      if (animated) {
-        format = "webp";
-      }
+      const animated = modifiers.animated !== void 0 || modifiers.a !== void 0 || format === "gif";
       const Sharp = await import('sharp').then((r) => r.default || r);
       let sharp = Sharp(data, { animated });
       Object.assign(sharp.options, options.sharp);
@@ -467,6 +481,8 @@ function createIPX(userOptions) {
   };
 }
 
+const MODIFIER_SEP = /[,&]/g;
+const MODIFIER_VAL_SEP = /[_=:]/g;
 const cache = {};
 function isExpired(key, cache2) {
   let cacheElement = cache2[key];
@@ -486,19 +502,19 @@ async function _handleRequest(req, ipx) {
     headers: {},
     body: ""
   };
-  const [modifiersStr = "", ...idSegments] = req.url.substr(1).split("/");
-  const id = decode(idSegments.join("/"));
+  const [modifiersStr = "", ...idSegments] = req.url.substring(1).split("/");
+  const id = safeString(decode(idSegments.join("/")));
   if (!modifiersStr) {
-    throw createError("Modifiers is missing in path: " + req.url, 400);
+    throw createError("Modifiers are missing", 400, req.url);
   }
   if (!id || id === "/") {
-    throw createError("Resource id is missing: " + req.url, 400);
+    throw createError("Resource id is missing", 400, req.url);
   }
   const modifiers = /* @__PURE__ */ Object.create(null);
   if (modifiersStr !== "_") {
-    for (const p of modifiersStr.split(",")) {
-      const [key, value = ""] = p.split("_");
-      modifiers[key] = decode(value);
+    for (const p of modifiersStr.split(MODIFIER_SEP)) {
+      const [key, value = ""] = p.split(MODIFIER_VAL_SEP);
+      modifiers[safeString(key)] = safeString(decode(value));
     }
   }
   clearExpiredCache();
@@ -514,7 +530,7 @@ async function _handleRequest(req, ipx) {
     cache[url] = {
       element: img,
       timestamp: new Date(),
-      expiry: src.maxAge || DEFAULT_CACHE_MAX_AGE
+      expiry: src.maxAge
     };
   }
   if (src.mtime) {
@@ -526,7 +542,7 @@ async function _handleRequest(req, ipx) {
     }
     res.headers["Last-Modified"] = +src.mtime + "";
   }
-  if (src.maxAge !== void 0) {
+  if (typeof src.maxAge === "number") {
     res.headers["Cache-Control"] = `max-age=${+src.maxAge}, public, s-maxage=${+src.maxAge}`;
   }
   const { data, format } = await img.data();
@@ -540,26 +556,26 @@ async function _handleRequest(req, ipx) {
     res.headers["Content-Type"] = `image/${format}`;
   }
   res.body = data;
-  return res;
+  return sanetizeReponse(res);
 }
 function handleRequest(req, ipx) {
   return _handleRequest(req, ipx).catch((err) => {
     const statusCode = parseInt(err.statusCode) || 500;
-    const statusMessage = err.statusMessage ? xss(err.statusMessage) : `IPX Error (${statusCode})`;
+    const statusMessage = err.statusMessage ? err.statusMessage : `IPX Error (${statusCode})`;
     if (process.env.NODE_ENV !== "production" && statusCode === 500) {
       console.error(err);
     }
-    return {
+    return sanetizeReponse({
       statusCode,
       statusMessage,
-      body: statusMessage,
+      body: "IPX Error: " + err,
       headers: {}
-    };
+    });
   });
 }
 function createIPXMiddleware(ipx) {
   return function IPXMiddleware(req, res) {
-    handleRequest({ url: req.url, headers: req.headers }, ipx).then((_res) => {
+    return handleRequest({ url: req.url, headers: req.headers }, ipx).then((_res) => {
       res.statusCode = _res.statusCode;
       res.statusMessage = _res.statusMessage;
       for (const name in _res.headers) {
@@ -568,6 +584,24 @@ function createIPXMiddleware(ipx) {
       res.end(_res.body);
     });
   };
+}
+function sanetizeReponse(res) {
+  return {
+    statusCode: res.statusCode || 200,
+    statusMessage: res.statusMessage ? safeString(res.statusMessage) : "OK",
+    headers: safeStringObject(res.headers || {}),
+    body: typeof res.body === "string" ? xss(safeString(res.body)) : res.body || ""
+  };
+}
+function safeString(input) {
+  return JSON.stringify(input).replace(/^"|"$/g, "");
+}
+function safeStringObject(input) {
+  const dst = {};
+  for (const key in input) {
+    dst[key] = safeString(input[key]);
+  }
+  return dst;
 }
 
 export { createIPXMiddleware as a, createIPX as c, handleRequest as h };

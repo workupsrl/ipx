@@ -6,7 +6,7 @@ interface SourceData {
     getData: () => Promise<Buffer>;
 }
 declare type Source = (src: string, reqOptions?: any) => Promise<SourceData>;
-declare type SourceFactory = (options?: any) => Source;
+declare type SourceFactory<T = Record<string, any>> = (options: T) => Source;
 
 interface ImageMeta {
     width: number;
@@ -27,10 +27,11 @@ interface IPXImageData {
 }
 declare type IPX = (id: string, modifiers?: Record<string, string>, reqOptions?: any) => IPXImageData;
 interface IPXOptions {
-    maxAge?: false | number;
     dir?: false | string;
+    maxAge?: number;
     domains?: false | string[];
     alias: Record<string, string>;
+    fetchOptions: RequestInit;
     sharp?: {
         [key: string]: any;
     };
@@ -54,6 +55,6 @@ interface IPXHResponse {
     body: any;
 }
 declare function handleRequest(req: IPXHRequest, ipx: IPX): Promise<IPXHResponse>;
-declare function createIPXMiddleware(ipx: IPX): (req: IncomingMessage, res: ServerResponse) => void;
+declare function createIPXMiddleware(ipx: IPX): (req: IncomingMessage, res: ServerResponse) => Promise<void>;
 
 export { IPX, IPXCTX, IPXCache, IPXHRequest, IPXHResponse, IPXImageData, IPXOptions, ImageMeta, Source, SourceData, SourceFactory, createIPX, createIPXMiddleware, handleRequest };

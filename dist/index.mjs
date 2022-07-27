@@ -4,7 +4,6 @@ import 'image-meta';
 import 'ufo';
 import 'fs';
 import 'pathe';
-import 'is-valid-path';
 import 'http';
 import 'https';
 import 'ohmyfetch';

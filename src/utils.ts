@@ -1,7 +1,5 @@
 import destr from 'destr'
 
-export const DEFAULT_CACHE_MAX_AGE = 60 * 60 * 24 * 365;
-
 export function getEnv (name: string, defaultValue: any) {
   return destr(process.env[name]) ?? defaultValue
 }

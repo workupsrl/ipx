@@ -3,7 +3,7 @@ import { decode } from 'ufo'
 import getEtag from 'etag'
 import xss from 'xss'
 import { IPX, IPXImageData } from './ipx'
-import { createError, DEFAULT_CACHE_MAX_AGE, getEnv } from './utils'
+import { createError, getEnv } from './utils'
 
 export interface IPXCache {
   element: IPXImageData,
@@ -93,7 +93,7 @@ async function _handleRequest (req: IPXHRequest, ipx: IPX): Promise<IPXHResponse
     cache[url] = {
       element: img,
       timestamp: new Date(),
-      expiry: src.maxAge || DEFAULT_CACHE_MAX_AGE
+      expiry: src.maxAge
     }
   }
 

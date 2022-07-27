@@ -8,7 +8,6 @@ require('image-meta');
 require('ufo');
 require('fs');
 require('pathe');
-require('is-valid-path');
 require('http');
 require('https');
 require('ohmyfetch');
