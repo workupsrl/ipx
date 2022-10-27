@@ -447,7 +447,7 @@ function makeCache(config = { type: "memory" }) {
 
 const SUPPORTED_FORMATS = ["jpeg", "png", "webp", "avif", "tiff", "gif"];
 function createIPX(userOptions) {
-  const cache = getEnv("IPX_CACHE_REDIS_HOST", null) ? {
+  const cache = getEnv("IPX_CACHE_ENABLED", false) && getEnv("IPX_CACHE_REDIS_HOST", null) ? {
     type: "redis",
     host: getEnv("IPX_CACHE_REDIS_HOST", null),
     ttl: 10 * 60,
@@ -506,8 +506,9 @@ function createIPX(userOptions) {
     });
     const getData = cachedPromise(async () => {
       let match;
+      const cacheKey = JSON.stringify({ id, ...modifiers });
       if (getEnv("IPX_CACHE_ENABLED", false) && ctx.cache) {
-        match = await ctx.cache.get(id);
+        match = await ctx.cache.get(cacheKey);
         if (match) {
           return match.element;
         }
@@ -562,7 +563,7 @@ function createIPX(userOptions) {
           timestamp: new Date(),
           expiry: src.maxAge
         };
-        await ctx.cache.set(id, cacheEntry, { ttl: void 0 });
+        await ctx.cache.set(cacheKey, cacheEntry, { ttl: void 0 });
       }
       return result;
     });

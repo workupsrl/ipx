@@ -49,7 +49,7 @@ export interface IPXOptions {
 const SUPPORTED_FORMATS = ['jpeg', 'png', 'webp', 'avif', 'tiff', 'gif']
 
 export function createIPX (userOptions: Partial<IPXOptions>): IPX {
-  const cache = getEnv('IPX_CACHE_REDIS_HOST', null)
+  const cache = getEnv('IPX_CACHE_ENABLED', false) && getEnv('IPX_CACHE_REDIS_HOST', null)
     ? {
         type: 'redis',
         host: getEnv('IPX_CACHE_REDIS_HOST', null),
@@ -124,8 +124,9 @@ export function createIPX (userOptions: Partial<IPXOptions>): IPX {
 
     const getData = cachedPromise(async () => {
       let match: any
+      const cacheKey = JSON.stringify({ id, ...modifiers })
       if (getEnv('IPX_CACHE_ENABLED', false) && ctx.cache) {
-        match = await ctx.cache.get(id)
+        match = await ctx.cache.get(cacheKey)
         if (match) {
           return match.element
         }
@@ -204,7 +205,7 @@ export function createIPX (userOptions: Partial<IPXOptions>): IPX {
           timestamp: new Date(),
           expiry: src.maxAge
         }
-        await ctx.cache.set(id, cacheEntry, { ttl: undefined })
+        await ctx.cache.set(cacheKey, cacheEntry, { ttl: undefined })
       }
 
       return result
