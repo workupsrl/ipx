@@ -128,7 +128,11 @@ export function createIPX (userOptions: Partial<IPXOptions>): IPX {
       if (getEnv('IPX_CACHE_ENABLED', false) && ctx.cache) {
         match = await ctx.cache.get(cacheKey)
         if (match) {
-          return match.element
+          const element = match.element
+          if (!(element instanceof Buffer)) {
+            element.data = Buffer.from(element.data)
+          }
+          return element
         }
       }
 

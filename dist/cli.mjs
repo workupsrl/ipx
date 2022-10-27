@@ -1,6 +1,6 @@
 import consola from 'consola';
 import { listen } from 'listhen';
-import { c as createIPX, a as createIPXMiddleware } from './shared/ipx.f6b45ce8.mjs';
+import { c as createIPX, a as createIPXMiddleware } from './shared/ipx.4c8f3706.mjs';
 import 'defu';
 import 'image-meta';
 import 'ufo';

@@ -1,4 +1,4 @@
-export { c as createIPX, a as createIPXMiddleware, h as handleRequest } from './shared/ipx.f6b45ce8.mjs';
+export { c as createIPX, a as createIPXMiddleware, h as handleRequest } from './shared/ipx.4c8f3706.mjs';
 import 'defu';
 import 'image-meta';
 import 'ufo';
