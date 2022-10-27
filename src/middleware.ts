@@ -3,7 +3,7 @@ import { decode } from 'ufo'
 import getEtag from 'etag'
 import xss from 'xss'
 import { IPX, IPXImageData } from './ipx'
-import { createError, getEnv } from './utils'
+import { createError } from './utils'
 
 export interface IPXCache {
   element: IPXImageData,
@@ -26,22 +26,6 @@ export interface IPXHResponse {
   headers: Record<string, string>
   body: any
 }
-
-// const cache: { [key: string]: IPXCache } = {}
-let cache = null
-
-// function isExpired(key: string, cache: {[key: string]: IPXCache}) {
-//   let cacheElement = cache[key]
-//   return cacheElement.timestamp.getTime() < new Date().getTime() - cacheElement.expiry * 1000
-// }
-
-// function clearExpiredCache() {
-//   for (const key in cache) {
-//     if (isExpired(key, cache)) {
-//       delete cache[key]
-//     }
-//   }
-// }
 
 async function _handleRequest (req: IPXHRequest, ipx: IPX): Promise<IPXHResponse> {
   const res: IPXHResponse = {
@@ -74,20 +58,7 @@ async function _handleRequest (req: IPXHRequest, ipx: IPX): Promise<IPXHResponse
     }
   }
 
-  // clearExpiredCache()
-
-  let url = req.url
-  let img: IPXImageData
-
-  const match = await cache.getAsync(url)
-
-  if (match) {
-    // Load cached request
-    img = match.element
-  } else {
-    // Create request
-    img = ipx(id, modifiers, req.options)
-  }
+  const img = ipx(id, modifiers, req.options)
 
   // Get image meta from source
   const src = await img.src()

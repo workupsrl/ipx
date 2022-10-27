@@ -1,14 +1,25 @@
-import defu from 'defu';
-import { imageMeta } from 'image-meta';
-import { withLeadingSlash, hasProtocol, joinURL, decode } from 'ufo';
-import { promises } from 'fs';
-import { resolve, join, parse } from 'pathe';
-import http from 'http';
-import https from 'https';
-import { fetch } from 'ohmyfetch';
-import destr from 'destr';
-import getEtag from 'etag';
-import xss from 'xss';
+'use strict';
+
+const defu = require('defu');
+const imageMeta = require('image-meta');
+const ufo = require('ufo');
+const fs = require('fs');
+const pathe = require('pathe');
+const http = require('http');
+const https = require('https');
+const ohmyfetch = require('ohmyfetch');
+const destr = require('destr');
+const getEtag = require('etag');
+const xss = require('xss');
+
+function _interopDefaultLegacy (e) { return e && typeof e === 'object' && 'default' in e ? e["default"] : e; }
+
+const defu__default = /*#__PURE__*/_interopDefaultLegacy(defu);
+const http__default = /*#__PURE__*/_interopDefaultLegacy(http);
+const https__default = /*#__PURE__*/_interopDefaultLegacy(https);
+const destr__default = /*#__PURE__*/_interopDefaultLegacy(destr);
+const getEtag__default = /*#__PURE__*/_interopDefaultLegacy(getEtag);
+const xss__default = /*#__PURE__*/_interopDefaultLegacy(xss);
 
 const Handlers = {
   __proto__: null,
@@ -47,7 +58,7 @@ const Handlers = {
 };
 
 function getEnv(name, defaultValue) {
-  return destr(process.env[name]) ?? defaultValue;
+  return destr__default(process.env[name]) ?? defaultValue;
 }
 function cachedPromise(fn) {
   let p;
@@ -69,15 +80,15 @@ function createError(statusMessage, statusCode, trace) {
 }
 
 const createFilesystemSource = (options) => {
-  const rootDir = resolve(options.dir);
+  const rootDir = pathe.resolve(options.dir);
   return async (id) => {
-    const fsPath = resolve(join(rootDir, id));
+    const fsPath = pathe.resolve(pathe.join(rootDir, id));
     if (!isValidPath(fsPath) || !fsPath.startsWith(rootDir)) {
       throw createError("Forbidden path", 403, id);
     }
     let stats;
     try {
-      stats = await promises.stat(fsPath);
+      stats = await fs.promises.stat(fsPath);
     } catch (err) {
       if (err.code === "ENOENT") {
         throw createError("File not found", 404, fsPath);
@@ -91,14 +102,14 @@ const createFilesystemSource = (options) => {
     return {
       mtime: stats.mtime,
       maxAge: options.maxAge,
-      getData: cachedPromise(() => promises.readFile(fsPath))
+      getData: cachedPromise(() => fs.promises.readFile(fsPath))
     };
   };
 };
 const isWindows = process.platform === "win32";
 function isValidPath(fp) {
   if (isWindows) {
-    fp = fp.slice(parse(fp).root.length);
+    fp = fp.slice(pathe.parse(fp).root.length);
   }
   if (/[<>:"|?*]/.test(fp)) {
     return false;
@@ -108,8 +119,8 @@ function isValidPath(fp) {
 
 const HTTP_RE = /^https?:\/\//;
 const createHTTPSource = (options) => {
-  const httpsAgent = new https.Agent({ keepAlive: true });
-  const httpAgent = new http.Agent({ keepAlive: true });
+  const httpsAgent = new https__default.Agent({ keepAlive: true });
+  const httpAgent = new http__default.Agent({ keepAlive: true });
   let _domains = options.domains || [];
   if (typeof _domains === "string") {
     _domains = _domains.split(",").map((s) => s.trim());
@@ -128,7 +139,7 @@ const createHTTPSource = (options) => {
     if (!reqOptions?.bypassDomain && !domains.find((domain) => hostname === domain)) {
       throw createError("Forbidden host", 403, hostname);
     }
-    const response = await fetch(id, {
+    const response = await ohmyfetch.fetch(id, {
       agent: id.startsWith("https") ? httpsAgent : httpAgent,
       ...options.fetchOptions
     });
@@ -157,7 +168,7 @@ const createHTTPSource = (options) => {
 };
 
 function VArg(arg) {
-  return destr(arg);
+  return destr__default(arg);
 }
 function parseArgs(args, mappers) {
   const vargs = args.split("_");
@@ -456,8 +467,8 @@ function createIPX(userOptions) {
     cache: null,
     sharp: {}
   };
-  const options = defu(userOptions, defaults);
-  options.alias = Object.fromEntries(Object.entries(options.alias).map((e) => [withLeadingSlash(e[0]), e[1]]));
+  const options = defu__default(userOptions, defaults);
+  options.alias = Object.fromEntries(Object.entries(options.alias).map((e) => [ufo.withLeadingSlash(e[0]), e[1]]));
   const ctx = {
     cache: void 0,
     sources: {}
@@ -482,14 +493,14 @@ function createIPX(userOptions) {
     if (!id) {
       throw createError("resource id is missing", 400);
     }
-    id = hasProtocol(id) ? id : withLeadingSlash(id);
+    id = ufo.hasProtocol(id) ? id : ufo.withLeadingSlash(id);
     for (const base in options.alias) {
       if (id.startsWith(base)) {
-        id = joinURL(options.alias[base], id.substr(base.length));
+        id = ufo.joinURL(options.alias[base], id.substr(base.length));
       }
     }
     const getSrc = cachedPromise(() => {
-      const source = hasProtocol(id) ? "http" : "filesystem";
+      const source = ufo.hasProtocol(id) ? "http" : "filesystem";
       if (!ctx.sources[source]) {
         throw createError("Unknown source", 400, source);
       }
@@ -502,7 +513,7 @@ function createIPX(userOptions) {
       }
       const src = await getSrc();
       const data = await src.getData();
-      const meta = imageMeta(data);
+      const meta = imageMeta.imageMeta(data);
       const mFormat = modifiers.f || modifiers.format;
       let format = mFormat || meta.type;
       if (format === "jpg") {
@@ -559,7 +570,6 @@ function createIPX(userOptions) {
 
 const MODIFIER_SEP = /[,&]/g;
 const MODIFIER_VAL_SEP = /[_=:]/g;
-let cache = null;
 async function _handleRequest(req, ipx) {
   const res = {
     statusCode: 200,
@@ -568,7 +578,7 @@ async function _handleRequest(req, ipx) {
     body: ""
   };
   const [modifiersStr = "", ...idSegments] = req.url.substring(1).split("/");
-  const id = safeString(decode(idSegments.join("/")));
+  const id = safeString(ufo.decode(idSegments.join("/")));
   if (!modifiersStr) {
     throw createError("Modifiers are missing", 400, req.url);
   }
@@ -579,17 +589,10 @@ async function _handleRequest(req, ipx) {
   if (modifiersStr !== "_") {
     for (const p of modifiersStr.split(MODIFIER_SEP)) {
       const [key, value = ""] = p.split(MODIFIER_VAL_SEP);
-      modifiers[safeString(key)] = safeString(decode(value));
+      modifiers[safeString(key)] = safeString(ufo.decode(value));
     }
   }
-  let url = req.url;
-  let img;
-  const match = await cache.getAsync(url);
-  if (match) {
-    img = match.element;
-  } else {
-    img = ipx(id, modifiers, req.options);
-  }
+  const img = ipx(id, modifiers, req.options);
   const src = await img.src();
   if (src.mtime) {
     if (req.headers["if-modified-since"]) {
@@ -604,7 +607,7 @@ async function _handleRequest(req, ipx) {
     res.headers["Cache-Control"] = `max-age=${+src.maxAge}, public, s-maxage=${+src.maxAge}`;
   }
   const { data, format } = await img.data();
-  const etag = getEtag(data);
+  const etag = getEtag__default(data);
   res.headers.ETag = etag;
   if (etag && req.headers["if-none-match"] === etag) {
     res.statusCode = 304;
@@ -649,7 +652,7 @@ function sanetizeReponse(res) {
     statusCode: res.statusCode || 200,
     statusMessage: res.statusMessage ? safeString(res.statusMessage) : "OK",
     headers: safeStringObject(res.headers || {}),
-    body: typeof res.body === "string" ? xss(safeString(res.body)) : res.body || ""
+    body: typeof res.body === "string" ? xss__default(safeString(res.body)) : res.body || ""
   };
 }
 function safeString(input) {
@@ -663,4 +666,6 @@ function safeStringObject(input) {
   return dst;
 }
 
-export { createIPXMiddleware as a, createIPX as c, handleRequest as h };
+exports.createIPX = createIPX;
+exports.createIPXMiddleware = createIPXMiddleware;
+exports.handleRequest = handleRequest;

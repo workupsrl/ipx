@@ -2,7 +2,7 @@
 
 Object.defineProperty(exports, '__esModule', { value: true });
 
-const middleware = require('./shared/ipx.f037afee.cjs');
+const middleware = require('./shared/ipx.4bb2dc57.cjs');
 require('defu');
 require('image-meta');
 require('ufo');
