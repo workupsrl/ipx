@@ -27,20 +27,21 @@ export interface IPXHResponse {
   body: any
 }
 
-const cache: { [key: string]: IPXCache } = {}
+// const cache: { [key: string]: IPXCache } = {}
+let cache = null
 
-function isExpired(key: string, cache: {[key: string]: IPXCache}) {
-  let cacheElement = cache[key]
-  return cacheElement.timestamp.getTime() < new Date().getTime() - cacheElement.expiry * 1000
-}
+// function isExpired(key: string, cache: {[key: string]: IPXCache}) {
+//   let cacheElement = cache[key]
+//   return cacheElement.timestamp.getTime() < new Date().getTime() - cacheElement.expiry * 1000
+// }
 
-function clearExpiredCache() {
-  for (const key in cache) {
-    if (isExpired(key, cache)) {
-      delete cache[key]
-    }
-  }
-}
+// function clearExpiredCache() {
+//   for (const key in cache) {
+//     if (isExpired(key, cache)) {
+//       delete cache[key]
+//     }
+//   }
+// }
 
 async function _handleRequest (req: IPXHRequest, ipx: IPX): Promise<IPXHResponse> {
   const res: IPXHResponse = {
@@ -73,13 +74,16 @@ async function _handleRequest (req: IPXHRequest, ipx: IPX): Promise<IPXHResponse
     }
   }
 
-  clearExpiredCache()
+  // clearExpiredCache()
 
   let url = req.url
   let img: IPXImageData
-  if (cache[url]) {
+
+  const match = await cache.getAsync(url)
+
+  if (match) {
     // Load cached request
-    img = cache[url].element
+    img = match.element
   } else {
     // Create request
     img = ipx(id, modifiers, req.options)
@@ -87,15 +91,6 @@ async function _handleRequest (req: IPXHRequest, ipx: IPX): Promise<IPXHResponse
 
   // Get image meta from source
   const src = await img.src()
-
-  if (getEnv('IPX_CACHE_ENABLED', false) && !cache[url]) {
-    // Store to cache
-    cache[url] = {
-      element: img,
-      timestamp: new Date(),
-      expiry: src.maxAge
-    }
-  }
 
   // Caching headers
   if (src.mtime) {

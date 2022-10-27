@@ -1,10 +1,12 @@
 import defu from 'defu'
 import { imageMeta } from 'image-meta'
 import { hasProtocol, joinURL, withLeadingSlash } from 'ufo'
+import type { Cache } from 'cache-manager'
 import type { Source, SourceData } from './types'
 import { createFilesystemSource, createHTTPSource } from './sources'
 import { applyHandler, getHandler } from './handlers'
 import { cachedPromise, getEnv, createError } from './utils'
+import makeCache from './cache-builders'
 
 // TODO: Move to image-meta
 export interface ImageMeta {
@@ -16,6 +18,7 @@ export interface ImageMeta {
 
 export interface IPXCTX {
   sources: Record<string, Source>
+  cache: Cache
 }
 
 export interface IPXImageData {
@@ -38,6 +41,7 @@ export interface IPXOptions {
   // TODO: Create types
   // https://github.com/lovell/sharp/blob/master/lib/constructor.js#L130
   sharp?: { [key: string]: any }
+  cache?: { [key: string]: any }
 }
 
 // https://sharp.pixelplumbing.com/#formats
@@ -51,6 +55,7 @@ export function createIPX (userOptions: Partial<IPXOptions>): IPX {
     alias: getEnv('IPX_ALIAS', {}),
     fetchOptions: getEnv('IPX_FETCH_OPTIONS', {}),
     maxAge: getEnv('IPX_MAX_AGE', 300),
+    cache: null,
     sharp: {}
   }
   const options: IPXOptions = defu(userOptions, defaults) as IPXOptions
@@ -59,6 +64,7 @@ export function createIPX (userOptions: Partial<IPXOptions>): IPX {
   options.alias = Object.fromEntries(Object.entries(options.alias).map(e => [withLeadingSlash(e[0]), e[1]]))
 
   const ctx: IPXCTX = {
+    cache: undefined,
     sources: {}
   }
 
@@ -75,6 +81,10 @@ export function createIPX (userOptions: Partial<IPXOptions>): IPX {
       fetchOptions: options.fetchOptions,
       maxAge: options.maxAge
     })
+  }
+
+  if (options.cache) {
+    ctx.cache = makeCache(options.cache)
   }
 
   return function ipx (id, modifiers = {}, reqOptions = {}) {
@@ -101,6 +111,11 @@ export function createIPX (userOptions: Partial<IPXOptions>): IPX {
     })
 
     const getData = cachedPromise(async () => {
+      const match = await ctx.cache.get(id)
+      if (match) {
+        return match.element
+      }
+
       const src = await getSrc()
       const data = await src.getData()
 
@@ -157,11 +172,23 @@ export function createIPX (userOptions: Partial<IPXOptions>): IPX {
       // Convert to buffer
       const newData = await sharp.toBuffer()
 
-      return {
+      const result = {
         data: newData,
         format,
         meta
       }
+
+      if (getEnv('IPX_CACHE_ENABLED', false) && !match) {
+        // Store to cache
+        const cacheEntry = {
+          element: result,
+          timestamp: new Date(),
+          expiry: src.maxAge
+        }
+        await ctx.cache.set(id, cacheEntry, { ttl: undefined })
+      }
+
+      return result
     })
 
     return {

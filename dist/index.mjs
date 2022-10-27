@@ -1,4 +1,4 @@
-export { c as createIPX, a as createIPXMiddleware, h as handleRequest } from './chunks/middleware.mjs';
+export { c as createIPX, a as createIPXMiddleware, h as handleRequest } from './shared/ipx.ff6b20c8.mjs';
 import 'defu';
 import 'image-meta';
 import 'ufo';

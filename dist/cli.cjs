@@ -2,7 +2,7 @@
 
 const consola = require('consola');
 const listhen = require('listhen');
-const middleware = require('./chunks/middleware.cjs');
+const middleware = require('./shared/ipx.f037afee.cjs');
 require('defu');
 require('image-meta');
 require('ufo');

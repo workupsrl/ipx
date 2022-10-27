@@ -106,6 +106,7 @@ function isValidPath(fp) {
   return true;
 }
 
+const HTTP_RE = /^https?:\/\//;
 const createHTTPSource = (options) => {
   const httpsAgent = new https.Agent({ keepAlive: true });
   const httpAgent = new http.Agent({ keepAlive: true });
@@ -114,7 +115,7 @@ const createHTTPSource = (options) => {
     _domains = _domains.split(",").map((s) => s.trim());
   }
   const domains = _domains.map((d) => {
-    if (!d.startsWith("http")) {
+    if (!HTTP_RE.test(d)) {
       d = "http://" + d;
     }
     return new URL(d).hostname;
@@ -387,6 +388,63 @@ const h = height;
 const s = resize;
 const pos = position;
 
+const BluebirdPromise = require("bluebird");
+const cacheManager = require("cache-manager");
+function memoryCache(config) {
+  return cacheManager.caching({
+    store: "memory",
+    ...config
+  });
+}
+function redisCache(config) {
+  if (config && Array.isArray(config.configure)) {
+    const redis = require("redis");
+    const client = redis.createClient({
+      retry_strategy() {
+      },
+      ...config
+    });
+    BluebirdPromise.all(config.configure.map((options) => new BluebirdPromise((resolve, reject) => {
+      client.CONFIG("SET", ...options, function(err, result) {
+        if (err || result !== "OK") {
+          reject(err);
+        } else {
+          resolve(result);
+        }
+      });
+    }))).then(() => client.quit());
+  }
+  return cacheManager.caching({
+    store: require("cache-manager-redis"),
+    retry_strategy() {
+    },
+    ...config
+  });
+}
+function memcachedCache(config) {
+  return cacheManager.caching({
+    store: require("cache-manager-memcached-store"),
+    ...config
+  });
+}
+function multiCache(config) {
+  const stores = config.stores.map(makeCache);
+  return cacheManager.multiCaching(stores);
+}
+const cacheBuilders = {
+  memory: memoryCache,
+  multi: multiCache,
+  redis: redisCache,
+  memcached: memcachedCache
+};
+function makeCache(config = { type: "memory" }) {
+  const builder = cacheBuilders[config.type];
+  if (!builder) {
+    throw new Error("Unknown store type: " + config.type);
+  }
+  return builder(config);
+}
+
 const SUPPORTED_FORMATS = ["jpeg", "png", "webp", "avif", "tiff", "gif"];
 function createIPX(userOptions) {
   const defaults = {
@@ -395,11 +453,13 @@ function createIPX(userOptions) {
     alias: getEnv("IPX_ALIAS", {}),
     fetchOptions: getEnv("IPX_FETCH_OPTIONS", {}),
     maxAge: getEnv("IPX_MAX_AGE", 300),
+    cache: null,
     sharp: {}
   };
   const options = defu(userOptions, defaults);
   options.alias = Object.fromEntries(Object.entries(options.alias).map((e) => [withLeadingSlash(e[0]), e[1]]));
   const ctx = {
+    cache: void 0,
     sources: {}
   };
   if (options.dir) {
@@ -414,6 +474,9 @@ function createIPX(userOptions) {
       fetchOptions: options.fetchOptions,
       maxAge: options.maxAge
     });
+  }
+  if (options.cache) {
+    ctx.cache = makeCache(options.cache);
   }
   return function ipx(id, modifiers = {}, reqOptions = {}) {
     if (!id) {
@@ -433,6 +496,10 @@ function createIPX(userOptions) {
       return ctx.sources[source](id, reqOptions);
     });
     const getData = cachedPromise(async () => {
+      const match = await ctx.cache.get(id);
+      if (match) {
+        return match.element;
+      }
       const src = await getSrc();
       const data = await src.getData();
       const meta = imageMeta(data);
@@ -468,11 +535,20 @@ function createIPX(userOptions) {
         });
       }
       const newData = await sharp.toBuffer();
-      return {
+      const result = {
         data: newData,
         format,
         meta
       };
+      if (getEnv("IPX_CACHE_ENABLED", false) && !match) {
+        const cacheEntry = {
+          element: result,
+          timestamp: new Date(),
+          expiry: src.maxAge
+        };
+        await ctx.cache.set(id, cacheEntry, { ttl: void 0 });
+      }
+      return result;
     });
     return {
       src: getSrc,
@@ -483,18 +559,7 @@ function createIPX(userOptions) {
 
 const MODIFIER_SEP = /[,&]/g;
 const MODIFIER_VAL_SEP = /[_=:]/g;
-const cache = {};
-function isExpired(key, cache2) {
-  let cacheElement = cache2[key];
-  return cacheElement.timestamp.getTime() < new Date().getTime() - cacheElement.expiry * 1e3;
-}
-function clearExpiredCache() {
-  for (const key in cache) {
-    if (isExpired(key, cache)) {
-      delete cache[key];
-    }
-  }
-}
+let cache = null;
 async function _handleRequest(req, ipx) {
   const res = {
     statusCode: 200,
@@ -517,22 +582,15 @@ async function _handleRequest(req, ipx) {
       modifiers[safeString(key)] = safeString(decode(value));
     }
   }
-  clearExpiredCache();
   let url = req.url;
   let img;
-  if (cache[url]) {
-    img = cache[url].element;
+  const match = await cache.getAsync(url);
+  if (match) {
+    img = match.element;
   } else {
     img = ipx(id, modifiers, req.options);
   }
   const src = await img.src();
-  if (getEnv("IPX_CACHE_ENABLED", false) && !cache[url]) {
-    cache[url] = {
-      element: img,
-      timestamp: new Date(),
-      expiry: src.maxAge
-    };
-  }
   if (src.mtime) {
     if (req.headers["if-modified-since"]) {
       if (new Date(req.headers["if-modified-since"]) >= src.mtime) {
@@ -555,6 +613,7 @@ async function _handleRequest(req, ipx) {
   if (format) {
     res.headers["Content-Type"] = `image/${format}`;
   }
+  res.headers["Content-Security-Policy"] = "default-src 'none'";
   res.body = data;
   return sanetizeReponse(res);
 }

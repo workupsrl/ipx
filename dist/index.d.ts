@@ -1,3 +1,4 @@
+import { Cache } from 'cache-manager';
 import { IncomingMessage, ServerResponse } from 'http';
 
 interface SourceData {
@@ -16,6 +17,7 @@ interface ImageMeta {
 }
 interface IPXCTX {
     sources: Record<string, Source>;
+    cache: Cache;
 }
 interface IPXImageData {
     src: () => Promise<SourceData>;
@@ -33,6 +35,9 @@ interface IPXOptions {
     alias: Record<string, string>;
     fetchOptions: RequestInit;
     sharp?: {
+        [key: string]: any;
+    };
+    cache?: {
         [key: string]: any;
     };
 }
