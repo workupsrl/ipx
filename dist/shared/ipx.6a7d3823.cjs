@@ -458,13 +458,22 @@ function makeCache(config = { type: "memory" }) {
 
 const SUPPORTED_FORMATS = ["jpeg", "png", "webp", "avif", "tiff", "gif"];
 function createIPX(userOptions) {
+  const cache = getEnv("IPX_CACHE_REDIS_HOST", null) ? {
+    type: "redis",
+    host: getEnv("IPX_CACHE_REDIS_HOST", null),
+    ttl: 10 * 60,
+    configure: [
+      ["maxmemory", "200mb"],
+      ["maxmemory-policy", "allkeys-lru"]
+    ]
+  } : null;
   const defaults = {
     dir: getEnv("IPX_DIR", "."),
     domains: getEnv("IPX_DOMAINS", []),
     alias: getEnv("IPX_ALIAS", {}),
     fetchOptions: getEnv("IPX_FETCH_OPTIONS", {}),
     maxAge: getEnv("IPX_MAX_AGE", 300),
-    cache: null,
+    cache,
     sharp: {}
   };
   const options = defu__default(userOptions, defaults);
@@ -507,9 +516,12 @@ function createIPX(userOptions) {
       return ctx.sources[source](id, reqOptions);
     });
     const getData = cachedPromise(async () => {
-      const match = await ctx.cache.get(id);
-      if (match) {
-        return match.element;
+      let match;
+      if (getEnv("IPX_CACHE_ENABLED", false) && ctx.cache) {
+        match = await ctx.cache.get(id);
+        if (match) {
+          return match.element;
+        }
       }
       const src = await getSrc();
       const data = await src.getData();
@@ -530,7 +542,11 @@ function createIPX(userOptions) {
       const Sharp = await import('sharp').then((r) => r.default || r);
       let sharp = Sharp(data, { animated });
       Object.assign(sharp.options, options.sharp);
-      const handlers = Object.entries(modifiers).map(([name, args]) => ({ handler: getHandler(name), name, args })).filter((h) => h.handler).sort((a, b) => {
+      const handlers = Object.entries(modifiers).map(([name, args]) => ({
+        handler: getHandler(name),
+        name,
+        args
+      })).filter((h) => h.handler).sort((a, b) => {
         const aKey = (a.handler.order || a.name || "").toString();
         const bKey = (b.handler.order || b.name || "").toString();
         return aKey.localeCompare(bKey);
@@ -551,7 +567,7 @@ function createIPX(userOptions) {
         format,
         meta
       };
-      if (getEnv("IPX_CACHE_ENABLED", false) && !match) {
+      if (getEnv("IPX_CACHE_ENABLED", false) && ctx.cache && !match) {
         const cacheEntry = {
           element: result,
           timestamp: new Date(),

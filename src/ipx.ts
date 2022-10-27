@@ -49,13 +49,25 @@ export interface IPXOptions {
 const SUPPORTED_FORMATS = ['jpeg', 'png', 'webp', 'avif', 'tiff', 'gif']
 
 export function createIPX (userOptions: Partial<IPXOptions>): IPX {
+  const cache = getEnv('IPX_CACHE_REDIS_HOST', null)
+    ? {
+        type: 'redis',
+        host: getEnv('IPX_CACHE_REDIS_HOST', null),
+        ttl: 10 * 60,
+        configure: [
+          ['maxmemory', '200mb'],
+          ['maxmemory-policy', 'allkeys-lru']
+        ]
+      }
+    : null
+
   const defaults = {
     dir: getEnv('IPX_DIR', '.'),
     domains: getEnv('IPX_DOMAINS', []),
     alias: getEnv('IPX_ALIAS', {}),
     fetchOptions: getEnv('IPX_FETCH_OPTIONS', {}),
     maxAge: getEnv('IPX_MAX_AGE', 300),
-    cache: null,
+    cache,
     sharp: {}
   }
   const options: IPXOptions = defu(userOptions, defaults) as IPXOptions
@@ -111,9 +123,12 @@ export function createIPX (userOptions: Partial<IPXOptions>): IPX {
     })
 
     const getData = cachedPromise(async () => {
-      const match = await ctx.cache.get(id)
-      if (match) {
-        return match.element
+      let match: any
+      if (getEnv('IPX_CACHE_ENABLED', false) && ctx.cache) {
+        match = await ctx.cache.get(id)
+        if (match) {
+          return match.element
+        }
       }
 
       const src = await getSrc()
@@ -147,7 +162,11 @@ export function createIPX (userOptions: Partial<IPXOptions>): IPX {
 
       // Resolve modifiers to handlers and sort
       const handlers = Object.entries(modifiers)
-        .map(([name, args]) => ({ handler: getHandler(name), name, args }))
+        .map(([name, args]) => ({
+          handler: getHandler(name),
+          name,
+          args
+        }))
         .filter(h => h.handler)
         .sort((a, b) => {
           const aKey = ((a.handler.order || a.name || '')).toString()
@@ -178,7 +197,7 @@ export function createIPX (userOptions: Partial<IPXOptions>): IPX {
         meta
       }
 
-      if (getEnv('IPX_CACHE_ENABLED', false) && !match) {
+      if (getEnv('IPX_CACHE_ENABLED', false) && ctx.cache && !match) {
         // Store to cache
         const cacheEntry = {
           element: result,
